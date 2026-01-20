@@ -1,0 +1,19 @@
+{
+  "tests": [
+    {
+      "name": "Get available drivers",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": [
+        {
+          "id": "number",
+          "name": "string",
+          "car": "string",
+          "rating": "number"
+        }
+      ],
+      "bodyMatcher": "partial"
+    }
+  ]
+}

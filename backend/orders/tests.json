@@ -1,0 +1,35 @@
+{
+  "tests": [
+    {
+      "name": "Get all orders",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": [],
+      "bodyMatcher": "type"
+    },
+    {
+      "name": "Create new order",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "driver_id": 1,
+        "passenger_name": "Иван Петров",
+        "passenger_phone": "+7 (999) 123-45-67",
+        "from_address": "ул. Тверская, 12",
+        "to_address": "пр-т Мира, 45",
+        "from_latitude": 55.751244,
+        "from_longitude": 37.618423,
+        "to_latitude": 55.753544,
+        "to_longitude": 37.621423,
+        "price": 450
+      },
+      "expectedStatus": 201,
+      "expectedBody": {
+        "id": "number",
+        "status": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

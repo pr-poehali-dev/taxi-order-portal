@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,30 +7,107 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import Icon from '@/components/ui/icon';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { useToast } from '@/hooks/use-toast';
+import YandexMap from '@/components/YandexMap';
+import { api, type Driver, type Order } from '@/lib/api';
 
-const mockDrivers = [
-  { id: 1, name: 'Александр', rating: 4.9, car: 'Toyota Camry', position: { top: '35%', left: '45%' } },
-  { id: 2, name: 'Михаил', rating: 4.8, car: 'Hyundai Solaris', position: { top: '55%', left: '60%' } },
-  { id: 3, name: 'Дмитрий', rating: 5.0, car: 'Skoda Octavia', position: { top: '42%', left: '52%' } },
-  { id: 4, name: 'Сергей', rating: 4.7, car: 'Kia Rio', position: { top: '48%', left: '38%' } },
-];
 
-const mockHistory = [
-  { id: 1, date: '18 янв, 14:30', from: 'ул. Тверская, 12', to: 'пр-т Мира, 45', cost: 450, driver: 'Александр', rating: 5 },
-  { id: 2, date: '17 янв, 09:15', from: 'Кутузовский пр-т, 8', to: 'ул. Арбат, 23', cost: 380, driver: 'Михаил', rating: 5 },
-  { id: 3, date: '16 янв, 18:45', from: 'Ленинградский пр-т, 77', to: 'ул. Петровка, 10', cost: 520, driver: 'Дмитрий', rating: 4 },
-  { id: 4, date: '15 янв, 12:00', from: 'ул. Большая Дмитровка, 5', to: 'Кутузовский пр-т, 36', cost: 410, driver: 'Сергей', rating: 5 },
-];
 
 const Index = () => {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [selectedDriver, setSelectedDriver] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState('order');
+  const [fromCoords, setFromCoords] = useState<number[] | null>(null);
+  const [toCoords, setToCoords] = useState<number[] | null>(null);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [driversData, ordersData] = await Promise.all([
+        api.getDrivers(),
+        api.getOrders()
+      ]);
+      setDrivers(driversData);
+      setOrders(ordersData);
+    } catch (error) {
+      toast({
+        title: 'Ошибка загрузки',
+        description: 'Не удалось загрузить данные',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const calculatePrice = () => {
     if (!from || !to) return 0;
     return Math.floor(Math.random() * 300) + 250;
+  };
+
+  const handleAddressSelect = (address: string, coords: number[], isFrom: boolean) => {
+    if (isFrom) {
+      setFrom(address);
+      setFromCoords(coords);
+    } else {
+      setTo(address);
+      setToCoords(coords);
+    }
+  };
+
+  const handleOrder = async () => {
+    if (!selectedDriver) {
+      toast({
+        title: 'Выберите водителя',
+        description: 'Пожалуйста, выберите водителя из списка',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const order = {
+        driver_id: selectedDriver,
+        passenger_name: 'Иван Петров',
+        passenger_phone: '+7 (999) 123-45-67',
+        from_address: from,
+        to_address: to,
+        from_latitude: fromCoords?.[0],
+        from_longitude: fromCoords?.[1],
+        to_latitude: toCoords?.[0],
+        to_longitude: toCoords?.[1],
+        price: estimatedPrice
+      };
+
+      await api.createOrder(order);
+      
+      toast({
+        title: 'Заказ оформлен!',
+        description: `Водитель ${drivers.find(d => d.id === selectedDriver)?.name} уже едет к вам`,
+      });
+
+      setFrom('');
+      setTo('');
+      setFromCoords(null);
+      setToCoords(null);
+      setSelectedDriver(null);
+      
+      loadData();
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось создать заказ',
+        variant: 'destructive'
+      });
+    }
   };
 
   const estimatedPrice = calculatePrice();
@@ -125,8 +202,8 @@ const Index = () => {
                           <span className="text-sm text-muted-foreground">Примерная стоимость</span>
                           <span className="text-2xl font-semibold text-foreground">{estimatedPrice} ₽</span>
                         </div>
-                        <Button className="w-full" size="lg">
-                          Заказать
+                        <Button className="w-full" size="lg" onClick={handleOrder}>
+                          Заказать такси
                         </Button>
                       </div>
                     )}
@@ -136,7 +213,11 @@ const Index = () => {
                 <div>
                   <h2 className="text-sm font-medium text-foreground mb-3">Доступные водители</h2>
                   <div className="space-y-2">
-                    {mockDrivers.map((driver) => (
+                    {loading ? (
+                      <div className="text-center py-8">
+                        <Icon name="Loader2" size={24} className="animate-spin text-primary mx-auto" />
+                      </div>
+                    ) : drivers.map((driver) => (
                       <Card
                         key={driver.id}
                         className={`cursor-pointer transition-all hover:shadow-md ${
@@ -161,11 +242,11 @@ const Index = () => {
                             <p className="text-xs text-muted-foreground">{driver.car}</p>
                           </div>
                           <div className="text-right">
-                            <div className="text-xs text-muted-foreground">~ 3 мин</div>
+                            <div className="text-xs font-medium text-primary">~ 3 мин</div>
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
+                    )))}
                   </div>
                 </div>
               </div>
@@ -179,25 +260,33 @@ const Index = () => {
                 </div>
 
                 <div className="space-y-3">
-                  {mockHistory.map((trip) => (
+                  {loading ? (
+                    <div className="text-center py-8">
+                      <Icon name="Loader2" size={24} className="animate-spin text-primary mx-auto" />
+                    </div>
+                  ) : orders.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Пока нет поездок
+                    </div>
+                  ) : orders.map((trip) => (
                     <Card key={trip.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <Icon name="Calendar" size={14} className="text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">{trip.date}</span>
+                            <span className="text-sm text-muted-foreground">{new Date(trip.created_at).toLocaleString('ru-RU')}</span>
                           </div>
-                          <span className="text-lg font-semibold text-foreground">{trip.cost} ₽</span>
+                          <span className="text-lg font-semibold text-foreground">{trip.price} ₽</span>
                         </div>
                         
                         <div className="space-y-2 mb-3">
                           <div className="flex items-start gap-2">
                             <Icon name="Circle" size={12} className="text-primary mt-1 flex-shrink-0" />
-                            <span className="text-sm text-foreground">{trip.from}</span>
+                            <span className="text-sm text-foreground">{trip.from_address}</span>
                           </div>
                           <div className="flex items-start gap-2">
                             <Icon name="MapPin" size={12} className="text-destructive mt-1 flex-shrink-0" />
-                            <span className="text-sm text-foreground">{trip.to}</span>
+                            <span className="text-sm text-foreground">{trip.to_address}</span>
                           </div>
                         </div>
 
@@ -207,10 +296,10 @@ const Index = () => {
                           <div className="flex items-center gap-2">
                             <Avatar className="h-7 w-7">
                               <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                                {trip.driver[0]}
+                                {trip.driver_name?.[0] || 'П'}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm text-muted-foreground">{trip.driver}</span>
+                            <span className="text-sm text-muted-foreground">{trip.driver_name || 'Водитель'}</span>
                           </div>
                           <div className="flex items-center gap-1">
                             {[...Array(5)].map((_, i) => (
@@ -225,7 +314,7 @@ const Index = () => {
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                  )))}
                 </div>
               </div>
             )}
@@ -375,86 +464,13 @@ const Index = () => {
           </div>
         </div>
 
-        <div className="flex-1 relative bg-muted/30">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-cyan-50">
-            <div className="absolute inset-0" style={{
-              backgroundImage: `
-                linear-gradient(to right, #e5e7eb 1px, transparent 1px),
-                linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
-              `,
-              backgroundSize: '40px 40px'
-            }}>
-            </div>
-
-            {from && to && mockDrivers.map((driver) => (
-              <div
-                key={driver.id}
-                className={`absolute w-12 h-12 bg-card rounded-full shadow-lg border-2 flex items-center justify-center cursor-pointer transition-all hover:scale-110 ${
-                  selectedDriver === driver.id ? 'border-primary ring-4 ring-primary/20' : 'border-border'
-                }`}
-                style={{ top: driver.position.top, left: driver.position.left }}
-                onClick={() => setSelectedDriver(driver.id)}
-              >
-                <Icon name="Car" size={20} className="text-primary" />
-              </div>
-            ))}
-
-            {from && (
-              <div
-                className="absolute w-8 h-8 bg-primary rounded-full shadow-md flex items-center justify-center animate-pulse"
-                style={{ top: '60%', left: '30%' }}
-              >
-                <Icon name="Circle" size={12} className="text-primary-foreground" />
-              </div>
-            )}
-
-            {to && (
-              <div
-                className="absolute w-8 h-8 bg-destructive rounded-full shadow-md flex items-center justify-center animate-pulse"
-                style={{ top: '25%', left: '70%' }}
-              >
-                <Icon name="MapPin" size={16} className="text-white" />
-              </div>
-            )}
-
-            {from && to && (
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                <defs>
-                  <marker
-                    id="arrowhead"
-                    markerWidth="10"
-                    markerHeight="7"
-                    refX="9"
-                    refY="3.5"
-                    orient="auto"
-                  >
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#0EA5E9" />
-                  </marker>
-                </defs>
-                <path
-                  d="M 30% 60% Q 45% 35%, 70% 25%"
-                  stroke="#0EA5E9"
-                  strokeWidth="3"
-                  fill="none"
-                  strokeDasharray="10,5"
-                  markerEnd="url(#arrowhead)"
-                  className="animate-pulse"
-                />
-              </svg>
-            )}
-          </div>
-
-          <div className="absolute bottom-6 right-6 flex flex-col gap-2">
-            <Button size="icon" className="h-12 w-12 shadow-lg">
-              <Icon name="Plus" size={20} />
-            </Button>
-            <Button size="icon" variant="secondary" className="h-12 w-12 shadow-lg">
-              <Icon name="Minus" size={20} />
-            </Button>
-            <Button size="icon" variant="secondary" className="h-12 w-12 shadow-lg">
-              <Icon name="Locate" size={20} />
-            </Button>
-          </div>
+        <div className="flex-1 relative">
+          <YandexMap 
+            drivers={drivers} 
+            onAddressSelect={handleAddressSelect}
+            fromCoords={fromCoords}
+            toCoords={toCoords}
+          />
         </div>
       </main>
     </div>
